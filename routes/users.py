@@ -85,14 +85,22 @@ def sort_movies(
     session: Session = Depends(get_session)
 ):
     try:
+        print(MovieFilters)
+        
         # Pega os filmes já assistidos pelo usuário para evitar recomendar os mesmos
         movies = session.exec(select(Movie)).all()
         watched_movies = [movie.tmdb_id for movie in movies if movie.status == "watched"]
         blacklisted_movies = [movie.tmdb_id for movie in movies if movie.status == "blacklist"]
 
+        # Lista para armazenar os filmes encontrados
+        all_movies = []
+        
+        # Define o número da página inicial (por exemplo, página 1)
+        page = 1
+
         # Tentativas de encontrar uma página válida com resultados
         for attempt in range(MAX_RETRIES):
-            # Fazendo uma requisição para obter filmes populares
+            # Fazendo uma requisição para obter filmes populares com filtros
             response = requests.get(
                 f'{os.getenv("BASE_URL")}/discover/movie',
                 params={
@@ -102,6 +110,7 @@ def sort_movies(
                     'primary_release_date.lte': filters.max_date,  # Data máxima de lançamento
                     'with_genres': filters.genre_id,  # Gênero específico
                     'vote_average.gte': filters.vote_average,  # Nota mínima
+                    'page': page  # Página atual
                 },
             )
 
@@ -112,15 +121,16 @@ def sort_movies(
             data = response.json()
             movies = data.get('results', [])
 
-            # Filtra os filmes que o usuário já assistiu ou esta na blacklist
+            # Filtra os filmes que o usuário já assistiu ou está na blacklist
             movies = [movie for movie in movies if movie['id'] not in watched_movies and movie['id'] not in blacklisted_movies]
-
 
             # Se a lista de provedores de streaming estiver vazia, retorna um filme aleatório sem verificar provedores
             if not filters.streaming_providers:
-                if movies:
-                    return movies
-                continue  # Tenta novamente se não houver filmes disponíveis
+                all_movies.extend(movies)  # Adiciona os filmes encontrados à lista geral
+                if len(all_movies) >= 20:  # Se já encontrou 20 filmes, retorna a lista
+                    return all_movies
+                page += 1  # Avança para a próxima página
+                continue  # Tenta buscar mais filmes
 
             # Caso contrário, faz a filtragem por provedores de streaming
             available_movies = []
@@ -142,9 +152,15 @@ def sort_movies(
                             available_movies.append(movie)
                             break
 
-            # Se houver filmes disponíveis nas plataformas desejadas, retorna um aleatório
-            if available_movies:
-                return available_movies
+            # Se houver filmes disponíveis nas plataformas desejadas, adiciona à lista
+            all_movies.extend(available_movies)
+
+            # Se já encontrou 20 filmes, retorna a lista
+            if len(all_movies) >= 18:
+                return all_movies
+
+            # Avança para a próxima página
+            page += 1
 
         # Se não encontrar filmes após várias tentativas
         raise Exception("Nenhum filme encontrado com os filtros fornecidos ou nas plataformas desejadas.")
@@ -152,6 +168,7 @@ def sort_movies(
     except Exception as e:
         print(f"Erro ao buscar filme: {e}")
         return {"error": str(e)}
+
 
 @router.post("/movies/", response_model=Movie)
 def create_movie(
@@ -327,3 +344,20 @@ def get_movies_assistidos_genero(session: Session = Depends(get_session)):
     
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Error getting movies: {str(e)}")
+    
+
+# retorna as tuplas do genero e o id dele no tmdb
+@router.get("/genres/")
+def get_genres(session: Session = Depends(get_session)):
+    try:
+        response = requests.get(
+            f'{os.getenv("BASE_URL")}/genre/movie/list',
+            params={'api_key': os.getenv("API_KEY")}
+        )
+        if response.status_code != 200:
+            raise HTTPException(status_code=400, detail=f"Erro ao buscar generos: {response.status_code}")
+        data = response.json()
+        genres = data.get('genres', [])
+        return genres
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error getting genres: {str(e)}")
