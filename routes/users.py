@@ -117,7 +117,7 @@ def sort_movies(
             # Se a lista de provedores de streaming estiver vazia, retorna um filme aleatório sem verificar provedores
             if not filters.streaming_providers:
                 if movies:
-                    return random.choice(movies)
+                    return movies
                 continue  # Tenta novamente se não houver filmes disponíveis
 
             # Caso contrário, faz a filtragem por provedores de streaming
@@ -142,7 +142,7 @@ def sort_movies(
 
             # Se houver filmes disponíveis nas plataformas desejadas, retorna um aleatório
             if available_movies:
-                return random.choice(available_movies)
+                return available_movies
 
         # Se não encontrar filmes após várias tentativas
         raise Exception("Nenhum filme encontrado com os filtros fornecidos ou nas plataformas desejadas.")
