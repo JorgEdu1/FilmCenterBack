@@ -88,6 +88,7 @@ def sort_movies(
         # Pega os filmes já assistidos pelo usuário para evitar recomendar os mesmos
         movies = session.exec(select(Movie)).all()
         watched_movies = [movie.tmdb_id for movie in movies if movie.status == "watched"]
+        blacklisted_movies = [movie.tmdb_id for movie in movies if movie.status == "blacklist"]
 
         # Tentativas de encontrar uma página válida com resultados
         for attempt in range(MAX_RETRIES):
@@ -111,8 +112,9 @@ def sort_movies(
             data = response.json()
             movies = data.get('results', [])
 
-            # Filtra os filmes que o usuário já assistiu
-            movies = [movie for movie in movies if movie['id'] not in watched_movies]
+            # Filtra os filmes que o usuário já assistiu ou esta na blacklist
+            movies = [movie for movie in movies if movie['id'] not in watched_movies and movie['id'] not in blacklisted_movies]
+
 
             # Se a lista de provedores de streaming estiver vazia, retorna um filme aleatório sem verificar provedores
             if not filters.streaming_providers:
